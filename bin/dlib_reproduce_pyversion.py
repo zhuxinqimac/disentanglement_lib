@@ -138,22 +138,24 @@ def main():
 
   # Iterate through the disentanglement metrics.
   eval_configs = sorted(study.get_eval_config_files())
+  blacklist = ['downstream_task_logistic_regression.gin']
   for config in postprocess_config_files:
     post_name = os.path.basename(config).replace(".gin", "")
     post_dir = os.path.join(output_directory, "postprocessed",
                             post_name)
     # Now, we compute all the specified scores.
     for gin_eval_config in eval_configs:
-      metric_name = os.path.basename(gin_eval_config).replace(".gin", "")
-      print("Computing metric '%s' on '%s'..." % (metric_name, post_name))
-      metric_dir = os.path.join(output_directory, "metrics", post_name,
-                                metric_name)
-      eval_bindings = [
-          "evaluation.random_seed = {}".format(random_state.randint(2**32)),
-          "evaluation.name = '{}'".format(metric_name)
-      ]
-      evaluate.evaluate_with_gin(post_dir, metric_dir, args.overwrite,
-                                 [gin_eval_config], eval_bindings)
+      if os.path.basename(gin_eval_config) not in blacklist:
+        metric_name = os.path.basename(gin_eval_config).replace(".gin", "")
+        print("Computing metric '%s' on '%s'..." % (metric_name, post_name))
+        metric_dir = os.path.join(output_directory, "metrics", post_name,
+                                  metric_name)
+        eval_bindings = [
+            "evaluation.random_seed = {}".format(random_state.randint(2**32)),
+            "evaluation.name = '{}'".format(metric_name)
+        ]
+        evaluate.evaluate_with_gin(post_dir, metric_dir, args.overwrite,
+                                   [gin_eval_config], eval_bindings)
 
 
 if __name__ == "__main__":
