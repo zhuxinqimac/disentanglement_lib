@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# coding=utf-8
 # Copyright 2018 The DisentanglementLib Authors.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,40 +26,36 @@ from __future__ import print_function
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-from absl import app
-from absl import flags
-from absl import logging
 from disentanglement_lib.config import reproduce
 from disentanglement_lib.evaluation import evaluate
 from disentanglement_lib.methods.unsupervised import train
 from disentanglement_lib.postprocessing import postprocess
 from disentanglement_lib.visualize import visualize_model
+import argparse
 import numpy as np
 import tensorflow.compat.v1 as tf
 
-FLAGS = flags.FLAGS
-flags.DEFINE_string("study", "unsupervised_study_v1",
-                    "Name of the study.")
-flags.DEFINE_string("output_directory", None,
-                    "Output directory of experiments ('{model_num}' will be"
-                    " replaced with the model index  and '{study}' will be"
-                    " replaced with the study name if present).")
-# Model flags. If the model_dir flag is set, then that directory is used and
-# training is skipped.
-flags.DEFINE_string("model_dir", None, "Directory to take trained model from.")
-# Otherwise, the model is trained using the 'model_num'-th config in the study.
-flags.DEFINE_integer("model_num", 0,
-                     "Integer with model number to train.")
-flags.DEFINE_boolean("only_print", False,
-                     "Whether to only print the hyperparameter settings.")
-flags.DEFINE_boolean("overwrite", False,
-                     "Whether to overwrite output directory.")
+def _str_to_bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
 
-
-def main(unused_argv):
-  # logging.basicConfig(level=logging.INFO)
-  logging.set_verbosity('error')
-  logging.set_stderrthreshold('error')
+def main():
+  parser = argparse.ArgumentParser(description='Project description.')
+  parser.add_argument('--study', help='Name of the study.', type=str, default='unsupervised_study_v1')
+  parser.add_argument('--output_directory', help='Output directory of experiments.', type=str, default=None)
+  parser.add_argument('--model_dir', help='Directory to take trained model from.', type=str, default=None)
+  parser.add_argument('--model_num', help='Integer with model number to train.', type=int, default=None)
+  parser.add_argument('--only_print', help='Whether to only print the hyperparameter settings.', type=_str_to_bool, default=False)
+  parser.add_argument('--overwrite', help='Whether to overwrite output directory.', type=_str_to_bool, default=False)
+  args = parser.parse_args()
+  # logging.set_verbosity('error')
+  # logging.set_stderrthreshold('error')
   gpus = tf.config.experimental.list_physical_devices('GPU')
   if gpus:
     try:
@@ -75,54 +69,54 @@ def main(unused_argv):
       print(e)
 
   # Obtain the study to reproduce.
-  study = reproduce.STUDIES[FLAGS.study]
+  study = reproduce.STUDIES[args.study]
 
   # Print the hyperparameter settings.
-  if FLAGS.model_dir is None:
-    study.print_model_config(FLAGS.model_num)
+  if args.model_dir is None:
+    study.print_model_config(args.model_num)
   else:
     print("Model directory (skipped training):")
     print("--")
-    print(FLAGS.model_dir)
+    print(args.model_dir)
   print()
   study.print_postprocess_config()
   print()
   study.print_eval_config()
-  if FLAGS.only_print:
+  if args.only_print:
     return
 
   # Set correct output directory.
-  if FLAGS.output_directory is None:
-    if FLAGS.model_dir is None:
+  if args.output_directory is None:
+    if args.model_dir is None:
       output_directory = os.path.join("output", "{study}", "{model_num}")
     else:
       output_directory = "output"
   else:
-    output_directory = FLAGS.output_directory
+    output_directory = args.output_directory
 
   # Insert model number and study name into path if necessary.
-  output_directory = output_directory.format(model_num=str(FLAGS.model_num),
-                                             study=str(FLAGS.study))
+  output_directory = output_directory.format(model_num=str(args.model_num),
+                                             study=str(args.study))
 
   # Model training (if model directory is not provided).
-  if FLAGS.model_dir is None:
-    model_bindings, model_config_file = study.get_model_config(FLAGS.model_num)
-    logging.info("Training model...")
+  if args.model_dir is None:
+    model_bindings, model_config_file = study.get_model_config(args.model_num)
+    print("Training model...")
     model_dir = os.path.join(output_directory, "model")
     model_bindings = [
         "model.name = '{}'".format(os.path.basename(model_config_file)).replace(
             ".gin", ""),
-        "model.model_num = {}".format(FLAGS.model_num),
+        "model.model_num = {}".format(args.model_num),
     ] + model_bindings
-    train.train_with_gin(model_dir, FLAGS.overwrite, [model_config_file],
+    train.train_with_gin(model_dir, args.overwrite, [model_config_file],
                          model_bindings)
   else:
-    logging.info("Skipped training...")
-    model_dir = FLAGS.model_dir
+    print("Skipped training...")
+    model_dir = args.model_dir
 
   # We visualize reconstructions, samples and latent space traversals.
   visualize_dir = os.path.join(output_directory, "visualizations")
-  visualize_model.visualize(model_dir, visualize_dir, FLAGS.overwrite)
+  visualize_model.visualize(model_dir, visualize_dir, args.overwrite)
 
   # We fix the random seed for the postprocessing and evaluation steps (each
   # config gets a different but reproducible seed derived from a master seed of
@@ -133,13 +127,13 @@ def main(unused_argv):
   postprocess_config_files = sorted(study.get_postprocess_config_files())
   for config in postprocess_config_files:
     post_name = os.path.basename(config).replace(".gin", "")
-    logging.info("Extracting representation %s...", post_name)
+    print("Extracting representation %s..." % post_name)
     post_dir = os.path.join(output_directory, "postprocessed", post_name)
     postprocess_bindings = [
         "postprocess.random_seed = {}".format(random_state.randint(2**32)),
         "postprocess.name = '{}'".format(post_name)
     ]
-    postprocess.postprocess_with_gin(model_dir, post_dir, FLAGS.overwrite,
+    postprocess.postprocess_with_gin(model_dir, post_dir, args.overwrite,
                                      [config], postprocess_bindings)
 
   # Iterate through the disentanglement metrics.
@@ -151,16 +145,16 @@ def main(unused_argv):
     # Now, we compute all the specified scores.
     for gin_eval_config in eval_configs:
       metric_name = os.path.basename(gin_eval_config).replace(".gin", "")
-      logging.info("Computing metric '%s' on '%s'...", metric_name, post_name)
+      print("Computing metric '%s' on '%s'..." % (metric_name, post_name))
       metric_dir = os.path.join(output_directory, "metrics", post_name,
                                 metric_name)
       eval_bindings = [
           "evaluation.random_seed = {}".format(random_state.randint(2**32)),
           "evaluation.name = '{}'".format(metric_name)
       ]
-      evaluate.evaluate_with_gin(post_dir, metric_dir, FLAGS.overwrite,
+      evaluate.evaluate_with_gin(post_dir, metric_dir, args.overwrite,
                                  [gin_eval_config], eval_bindings)
 
 
 if __name__ == "__main__":
-  app.run(main)
+    main()
