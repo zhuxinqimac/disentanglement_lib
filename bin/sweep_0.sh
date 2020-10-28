@@ -5,10 +5,9 @@
 #done
 #wait
 
-#for i in 10900 10902 10904 10906 10908
-for i in 10900
+for i in 10900 10903 10906
 do
-    for j in 0 1 2 3 4
+    for j in 0 1 2
     do
         k=$(( $i + $j ))
         CUDA_VISIBLE_DEVICES=0 \

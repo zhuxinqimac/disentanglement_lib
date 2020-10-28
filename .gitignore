@@ -2,3 +2,4 @@
 .*.swo
 .*.swn
 *.pyc
+sweep*.sh
